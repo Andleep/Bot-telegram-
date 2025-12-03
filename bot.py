@@ -1,108 +1,103 @@
 import os
 import time
 import threading
-from flask import Flask, request
 import telebot
+from flask import Flask, request, abort
 import requests
 
-# =============================
-# إعدادات البوت والمتغيرات
-# =============================
-BOT_TOKEN = os.environ.get("BOT_TOKEN")  # ضع مفتاح بوت Telegram هنا
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")  # رابط Render مع / في النهاية
-CHANNEL_ID = os.environ.get("CHANNEL_ID")  # @اسم_القناة أو chat_id
+# --- الإعدادات ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = os.getenv("CHANNEL_ID")  # chat_id أو @اسم_القناة
+GEMINI_KEY = os.getenv("GEMINI_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # رابط Render مع /
 
-GEMINI_KEY = os.environ.get("GEMINI_KEY")  # مفتاح GeminiGen AI
+if not all([BOT_TOKEN, CHANNEL_ID, GEMINI_KEY, WEBHOOK_URL]):
+    print("❌ خطأ: تأكد من ضبط جميع المتغيرات البيئة BOT_TOKEN, CHANNEL_ID, GEMINI_KEY, WEBHOOK_URL")
+    exit(1)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-# =============================
-# أوامر البوت
-# =============================
-@bot.message_handler(commands=['start'])
-def start_message(message):
-    bot.reply_to(message, "مرحبًا! البوت جاهز لإرسال الفيديوهات تلقائيًا 🎬")
-
-# =============================
-# دالة لإنشاء فيديو عبر GeminiGen AI
-# =============================
+# --- دالة إنشاء الفيديو ---
 def create_video(prompt_text):
+    print(f"⏳ جاري إنشاء الفيديو بعنوان: {prompt_text}")
     url = "https://api.geminigen.ai/uapi/v1/generate"
     headers = {
         "x-api-key": GEMINI_KEY,
         "Content-Type": "application/json"
     }
-    data = {
+    payload = {
         "type": "video",
-        "prompt": prompt_text
+        "prompt": prompt_text,
+        "language": "ar"  # الكلام بالعربي داخل الفيديو
     }
     try:
-        response = requests.post(url, json=data, headers=headers)
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
         response.raise_for_status()
-        result = response.json()
-        # افترض أن الرابط النهائي للفيديو موجود في result['url']
-        return result.get("url", None)
+        data = response.json()
+        video_url = data.get("video_url") or data.get("url")  # حسب رد API
+        if video_url:
+            print(f"✅ تم إنشاء الفيديو: {video_url}")
+            return video_url
+        else:
+            print("❌ لم يتم إنشاء الفيديو. استجابة API:", data)
+            return None
     except Exception as e:
-        print("❌ خطأ أثناء إنشاء الفيديو:", e)
+        print("❌ حدث خطأ أثناء إنشاء الفيديو:", e)
         return None
 
-# =============================
-# دالة إرسال الفيديو للقناة
-# =============================
+# --- دالة إرسال الفيديو للقناة ---
 def send_video_to_channel(video_url):
-    if video_url:
-        try:
-            bot.send_video(CHANNEL_ID, video=video_url)
-            print("✅ تم إرسال الفيديو للقناة")
-        except Exception as e:
-            print("❌ خطأ أثناء إرسال الفيديو:", e)
+    if not video_url:
+        print("❌ لا يوجد فيديو للإرسال")
+        return
+    try:
+        bot.send_message(CHANNEL_ID, f"🎬 فيديو جديد: {video_url}")
+        print(f"✅ تم إرسال الفيديو للقناة: {CHANNEL_ID}")
+    except Exception as e:
+        print("❌ حدث خطأ أثناء إرسال الفيديو:", e)
 
-# =============================
-# دالة تعمل بشكل دوري كل 5 دقائق
-# =============================
-def periodic_video_task():
+# --- دالة المهام الدورية ---
+def job():
+    prompts = [
+        "فاصل كوميدي خليجي مضحك",
+        "تمثيل مضحك مصري",
+        "نكثة سورية مضحكة",
+        "مقطع مضحك خليجي عشوائي",
+        "تمثيل هزلي مصري"
+    ]
     while True:
-        try:
-            # يمكنك تغيير النصوص لتكون عشوائية: خليجي، مصري، نكث، تمثيل مضحك
-            prompts = [
-                "فاصل كوميدي خليجي مضحك",
-                "موقف تمثيلي مصري مضحك",
-                "نكث سورية كوميديا خفيفة"
-            ]
-            prompt = prompts[int(time.time()) // 300 % len(prompts)]  # كل 5 دقائق نص جديد
-            print("⏳ جاري إنشاء الفيديو:", prompt)
-            video_url = create_video(prompt)
-            send_video_to_channel(video_url)
-        except Exception as e:
-            print("❌ خطأ في المهمة الدورية:", e)
+        prompt = prompts[int(time.time()) % len(prompts)]  # اختيار عشوائي مبسط
+        video_url = create_video(prompt)
+        send_video_to_channel(video_url)
+        print("⏰ انتظار 5 دقائق قبل إنشاء الفيديو التالي...")
         time.sleep(300)  # 5 دقائق
 
-# =============================
-# Webhook: استقبال تحديثات Telegram
-# =============================
-@app.route("/", methods=["POST"])
+# --- بوت التلجرام ---
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "مرحبًا! البوت جاهز لإرسال الفيديوهات تلقائيًا 🎬")
+
+# --- Webhook (لـ Render) ---
+@app.route("/", methods=['POST'])
 def webhook():
-    json_data = request.get_json()
-    if json_data:
-        update = telebot.types.Update.de_json(json_data)
+    if request.headers.get('content-type') == 'application/json':
+        json_str = request.get_data().decode('UTF-8')
+        update = telebot.types.Update.de_json(json_str)
         bot.process_new_updates([update])
-    return "", 200
+        return ""
+    else:
+        abort(403)
 
-# =============================
-# تسجيل Webhook وتشغيل Flask
-# =============================
+# --- تشغيل المهمة الدورية في Thread ---
+threading.Thread(target=job, daemon=True).start()
+
+# --- ضبط Webhook على Telegram ---
+bot.remove_webhook()
+bot.set_webhook(url=WEBHOOK_URL)
+
+# --- تشغيل Flask ---
 if __name__ == "__main__":
-    try:
-        bot.remove_webhook()
-        bot.set_webhook(url=WEBHOOK_URL)
-        print(f"✅ تم تسجيل Webhook: {WEBHOOK_URL}")
-    except Exception as e:
-        print("❌ خطأ أثناء تسجيل Webhook:", e)
-
-    # تشغيل المهمة الدورية في Thread منفصل
-    threading.Thread(target=periodic_video_task, daemon=True).start()
-
-    # تشغيل Flask
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 البوت يعمل على المنفذ {port}")
     app.run(host="0.0.0.0", port=port)
