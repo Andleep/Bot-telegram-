@@ -1,9 +1,7 @@
 services:
-  - type: worker
-    name: telegram-bot
+  - type: web
+    name: fawasil-comedy-bot
     env: python
-    startCommand: "python bot.py"
+    plan: free
     buildCommand: "pip install -r requirements.txt"
-    envVars:
-      - key: BOT_TOKEN
-        sync: false
+    startCommand: "python bot.py"
