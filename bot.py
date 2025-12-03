@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 # ------------- قراءة المتغيرات من البيئة ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BOT_CHANNEL = os.getenv("BOT_CHANNEL")  # مثال: "@fawasil_comedy" أو "-1001234567890"
-GEMINI_KEY = os.getenv("GEMINI_KEY")
+GEMINI_KEY = os.getenv("tts-5ea85cfc18184dbef6c175861bf98af3")
 
 # اختياري / لنشر لاحقاً
 YOUTUBE_ACCESS_TOKEN = os.getenv("YOUTUBE_ACCESS_TOKEN", "")
