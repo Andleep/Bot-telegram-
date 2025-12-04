@@ -26,7 +26,7 @@ def create_video(prompt_ar, duration=10):
     duration: مدة الفيديو بالثواني
     """
     prompt_en = f"Funny video: {prompt_ar}"  # مطالبة بالإنجليزية
-    url = "https://api.geminigen.ai/uapi/v1/generate"  # رابط API الجديد
+    url = "https://api.geminigen.ai/api/v1/video/generate"  # رابط API الجديد
     headers = {
         "x-api-key": GEMINI_KEY,
         "Content-Type": "application/json"
